@@ -1,0 +1,17 @@
+{
+  "name": "agentguard",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/core",
+    "packages/dashboard"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=packages/core\" \"npm run dev --workspace=packages/dashboard\"",
+    "build": "npm run build --workspace=packages/core && npm run build --workspace=packages/dashboard",
+    "start": "npm run start --workspace=packages/core"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
