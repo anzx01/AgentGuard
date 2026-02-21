@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  core:
+    build:
+      context: .
+      dockerfile: packages/core/Dockerfile
+    container_name: agentguard-core
+    restart: unless-stopped
+    ports:
+      - "3000:3000"   # Management API
+      - "8080:8080"   # Proxy
+    volumes:
+      - agentguard_data:/data
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/data/agentguard.db
+      - API_PORT=3000
+      - PROXY_PORT=8080
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+    networks:
+      - agentguard_net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: packages/dashboard/Dockerfile
+    container_name: agentguard-dashboard
+    restart: unless-stopped
+    ports:
+      - "3001:3001"   # Dashboard UI
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://core:3000
+    depends_on:
+      core:
+        condition: service_healthy
+    networks:
+      - agentguard_net
+
+volumes:
+  agentguard_data:
+    driver: local
+
+networks:
+  agentguard_net:
+    driver: bridge
