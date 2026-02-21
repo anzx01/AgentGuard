@@ -22,6 +22,7 @@ export function createAgentsRouter(): Router {
     const db = getDb()
     const agents = db.prepare(`
       SELECT a.id, a.name, a.description, a.status, a.created_at, a.last_seen_at,
+             CASE WHEN a.upstream_api_key IS NOT NULL THEN 1 ELSE 0 END as has_upstream_key,
              at.token_prefix
       FROM agents a
       LEFT JOIN agent_tokens at ON at.agent_id = a.id AND at.is_active = 1
@@ -32,7 +33,7 @@ export function createAgentsRouter(): Router {
 
   router.post('/', (req: Request, res: Response) => {
     const db = getDb()
-    const { name, description } = req.body as { name?: string; description?: string }
+    const { name, description, upstream_api_key } = req.body as { name?: string; description?: string; upstream_api_key?: string }
     if (!name) return res.status(400).json({ error: 'name_required' })
 
     // Check Free tier limit
@@ -47,7 +48,7 @@ export function createAgentsRouter(): Router {
     // Create default rule set for this agent
     const ruleSetId = `rs_${Date.now()}`
     db.prepare(`INSERT INTO rule_sets (id, name) VALUES (?, ?)`).run(ruleSetId, `${name} 规则集`)
-    db.prepare(`INSERT INTO agents (id, name, description, rule_set_id) VALUES (?, ?, ?, ?)`).run(id, name, description ?? null, ruleSetId)
+    db.prepare(`INSERT INTO agents (id, name, description, rule_set_id, upstream_api_key) VALUES (?, ?, ?, ?, ?)`).run(id, name, description ?? null, ruleSetId, upstream_api_key ?? null)
 
     const token = genToken(id)
     db.prepare(`INSERT INTO agent_tokens (id, agent_id, token_hash, token_prefix) VALUES (?, ?, ?, ?)`).run(
@@ -60,7 +61,11 @@ export function createAgentsRouter(): Router {
 
   router.get('/:id', (req: Request, res: Response) => {
     const db = getDb()
-    const agent = db.prepare(`SELECT * FROM agents WHERE id = ?`).get(req.params.id)
+    const agent = db.prepare(`
+      SELECT id, name, description, status, rule_set_id, created_at, updated_at, last_seen_at,
+             CASE WHEN upstream_api_key IS NOT NULL THEN 1 ELSE 0 END as has_upstream_key
+      FROM agents WHERE id = ?
+    `).get(req.params.id)
     if (!agent) return res.status(404).json({ error: 'not_found' })
 
     const rules = db.prepare(`
@@ -75,12 +80,12 @@ export function createAgentsRouter(): Router {
 
   router.put('/:id', (req: Request, res: Response) => {
     const db = getDb()
-    const { name, description } = req.body as { name?: string; description?: string }
+    const { name, description, upstream_api_key } = req.body as { name?: string; description?: string; upstream_api_key?: string }
     const before = db.prepare('SELECT * FROM agents WHERE id = ?').get(req.params.id)
     if (!before) return res.status(404).json({ error: 'not_found' })
 
-    db.prepare(`UPDATE agents SET name = COALESCE(?, name), description = COALESCE(?, description), updated_at = datetime('now') WHERE id = ?`)
-      .run(name ?? null, description ?? null, req.params.id)
+    db.prepare(`UPDATE agents SET name = COALESCE(?, name), description = COALESCE(?, description), upstream_api_key = COALESCE(?, upstream_api_key), updated_at = datetime('now') WHERE id = ?`)
+      .run(name ?? null, description ?? null, upstream_api_key ?? null, req.params.id)
 
     logConfigChange({ action: 'update', resourceType: 'agent', resourceId: req.params.id, before, after: req.body, ipAddress: req.ip })
     res.json(db.prepare('SELECT * FROM agents WHERE id = ?').get(req.params.id))

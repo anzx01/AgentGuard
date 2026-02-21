@@ -3,7 +3,12 @@
     "allow": [
       "Bash(node:*)",
       "Bash(npm:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(powershell -Command \":*)",
+      "Bash(powershell -File:*)",
+      "Bash(git rm:*)",
+      "WebFetch(domain:docs.openclaw.ai)"
     ]
   }
 }

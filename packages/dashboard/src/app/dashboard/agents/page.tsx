@@ -10,12 +10,13 @@ interface Agent {
   created_at: string
   last_seen_at: string | null
   token_prefix: string | null
+  has_upstream_key: number
 }
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: '', description: '' })
+  const [form, setForm] = useState({ name: '', description: '', upstream_api_key: '' })
   const [newToken, setNewToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -38,7 +39,7 @@ export default function AgentsPage() {
       })
       setNewToken(res.token)
       setShowForm(false)
-      setForm({ name: '', description: '' })
+      setForm({ name: '', description: '', upstream_api_key: '' })
       load()
     } catch (err) {
       setError((err as Error).message)
@@ -115,6 +116,17 @@ export default function AgentsPage() {
                 placeholder="用途描述"
               />
             </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">上游 API Key（可选）</label>
+              <input
+                type="password"
+                value={form.upstream_api_key}
+                onChange={e => setForm(f => ({ ...f, upstream_api_key: e.target.value }))}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                placeholder="sk-... 或 sk-ant-... 填写后可用 AgentGuard Token 替代真实 API Key"
+              />
+              <p className="text-xs text-gray-600 mt-1">填写后，OpenClaw 等工具只需将 AgentGuard Token 作为 API Key 即可，无需暴露真实密钥</p>
+            </div>
             {error && <p className="text-red-400 text-xs">{error}</p>}
             <div className="flex gap-2">
               <button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm">
@@ -172,6 +184,11 @@ export default function AgentsPage() {
               <span>Token: <code className="text-gray-400">{agent.token_prefix ?? 'ag_live_'}...</code></span>
               <span>创建于 {new Date(agent.created_at).toLocaleDateString()}</span>
               {agent.last_seen_at && <span>最后活跃 {new Date(agent.last_seen_at).toLocaleString()}</span>}
+              {agent.has_upstream_key ? (
+                <span className="text-green-500">✓ 已配置上游 Key</span>
+              ) : (
+                <span className="text-gray-600">未配置上游 Key</span>
+              )}
             </div>
           </div>
         ))}
