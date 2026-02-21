@@ -32,32 +32,57 @@ export function createProxyRouter() {
     const targetUrl = `${targetBase}${restPath}${req.url.includes('?') ? '?' + req.url.split('?')[1] : ''}`
 
     // 2. Resolve Agent identity
-    const tokenHeader =
-      req.headers['x-agentguard-token'] as string ||
-      (req.headers['authorization'] as string)?.replace(/^Bearer\s+/i, '')
+    // Support two modes:
+    //   a) X-AgentGuard-Token header (explicit)
+    //   b) Authorization: Bearer ag_live_xxx  (OpenClaw / SDK-friendly mode)
+    const xToken = req.headers['x-agentguard-token'] as string | undefined
+    const authHeader = req.headers['authorization'] as string | undefined
+    const authBearer = authHeader?.replace(/^Bearer\s+/i, '')
+    // Treat Authorization bearer as AgentGuard token only when it looks like one
+    const isAuthAgToken = authBearer?.startsWith('ag_live_') ?? false
+    const tokenHeader = xToken || (isAuthAgToken ? authBearer : undefined)
 
     let agentId: string | null = null
+    let upstreamApiKey: string | null = null
+
     if (tokenHeader) {
       const tokenHash = crypto.createHash('sha256').update(tokenHeader).digest('hex')
       const tokenRow = db
-        .prepare(`SELECT agent_id FROM agent_tokens WHERE token_hash = ? AND is_active = 1`)
-        .get(tokenHash) as { agent_id: string } | undefined
+        .prepare(`SELECT at.agent_id, a.upstream_api_key
+                  FROM agent_tokens at
+                  JOIN agents a ON a.id = at.agent_id
+                  WHERE at.token_hash = ? AND at.is_active = 1`)
+        .get(tokenHash) as { agent_id: string; upstream_api_key: string | null } | undefined
 
       if (tokenRow) {
         agentId = tokenRow.agent_id
-        // Update last_seen
+        upstreamApiKey = tokenRow.upstream_api_key
         db.prepare(`UPDATE agents SET last_seen_at = datetime('now') WHERE id = ?`).run(agentId)
         db.prepare(`UPDATE agent_tokens SET last_used_at = datetime('now') WHERE token_hash = ?`).run(tokenHash)
       }
     } else {
       // No token: use default agent if only one exists
-      const agents = db.prepare(`SELECT id FROM agents WHERE status = 'active' LIMIT 2`).all() as { id: string }[]
-      if (agents.length === 1) agentId = agents[0].id
+      const agents = db.prepare(`SELECT id, upstream_api_key FROM agents WHERE status = 'active' LIMIT 2`).all() as { id: string; upstream_api_key: string | null }[]
+      if (agents.length === 1) {
+        agentId = agents[0].id
+        upstreamApiKey = agents[0].upstream_api_key
+      }
     }
 
     if (!agentId) {
       return res.status(401).json({ error: 'unauthorized', message: '无效的 Agent Token' })
     }
+
+    // If token came via Authorization header and agent has an upstream key stored,
+    // rewrite the Authorization header so the real API key reaches the upstream.
+    if (isAuthAgToken && upstreamApiKey) {
+      req.headers['authorization'] = `Bearer ${upstreamApiKey}`
+    } else if (isAuthAgToken && !upstreamApiKey) {
+      // No upstream key configured — remove the AgentGuard token so it doesn't leak upstream
+      delete req.headers['authorization']
+    }
+    // Always strip the AgentGuard-specific header before forwarding
+    delete req.headers['x-agentguard-token']
 
     // 3. Kill Switch check
     const killCheck = isBlocked(agentId)

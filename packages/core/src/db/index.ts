@@ -20,15 +20,16 @@ export function getDb(): Database.Database {
 function initSchema(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS agents (
-      id            TEXT PRIMARY KEY,
-      name          TEXT NOT NULL UNIQUE,
-      description   TEXT,
-      status        TEXT NOT NULL DEFAULT 'active'
-                    CHECK(status IN ('active','paused','blocked')),
-      rule_set_id   TEXT,
-      created_at    DATETIME NOT NULL DEFAULT (datetime('now')),
-      updated_at    DATETIME NOT NULL DEFAULT (datetime('now')),
-      last_seen_at  DATETIME
+      id                  TEXT PRIMARY KEY,
+      name                TEXT NOT NULL UNIQUE,
+      description         TEXT,
+      status              TEXT NOT NULL DEFAULT 'active'
+                          CHECK(status IN ('active','paused','blocked')),
+      rule_set_id         TEXT,
+      upstream_api_key    TEXT,
+      created_at          DATETIME NOT NULL DEFAULT (datetime('now')),
+      updated_at          DATETIME NOT NULL DEFAULT (datetime('now')),
+      last_seen_at        DATETIME
     );
 
     CREATE TABLE IF NOT EXISTS agent_tokens (
@@ -170,6 +171,12 @@ function initSchema(db: Database.Database) {
       created_at      DATETIME NOT NULL DEFAULT (datetime('now'))
     );
   `)
+
+  // Migration: add upstream_api_key column if missing
+  const cols = db.prepare(`PRAGMA table_info(agents)`).all() as { name: string }[]
+  if (!cols.find(c => c.name === 'upstream_api_key')) {
+    db.exec(`ALTER TABLE agents ADD COLUMN upstream_api_key TEXT`)
+  }
 
   // Seed built-in aliases
   const insertAlias = db.prepare(`
