@@ -8,5 +8,10 @@ licenses. The dependency set is primarily MIT, ISC, Apache-2.0, BSD, and
 similarly permissive licenses. Review package-lock.json and the dependency
 packages' own license files for exact terms before redistribution.
 
+Next.js may install optional sharp/libvips platform packages for image
+optimization. Those optional packages include Apache-2.0 and LGPL-3.0-or-later
+components; keep their license notices intact when redistributing bundled
+artifacts that include them.
+
 The image files under image/README are AgentGuard project assets and are
 licensed under the same MIT License unless replaced by downstream users.
