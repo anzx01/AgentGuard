@@ -8,8 +8,8 @@ services:
     container_name: agentguard-core
     restart: unless-stopped
     ports:
-      - "3000:3000"   # Management API
-      - "8080:8080"   # Proxy
+      - "127.0.0.1:3000:3000"   # Management API
+      - "127.0.0.1:8080:8080"   # Proxy
     volumes:
       - agentguard_data:/data
     environment:
@@ -17,7 +17,7 @@ services:
       - DB_PATH=/data/agentguard.db
       - API_PORT=3000
       - PROXY_PORT=8080
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET before starting AgentGuard}
     networks:
       - agentguard_net
     healthcheck:
@@ -33,7 +33,7 @@ services:
     container_name: agentguard-dashboard
     restart: unless-stopped
     ports:
-      - "3001:3001"   # Dashboard UI
+      - "127.0.0.1:3001:3001"   # Dashboard UI
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=http://core:3000

@@ -1,8 +1,9 @@
 import { getDb } from '../db/index.js'
 import { logSystemEvent } from './auditLogger.js'
-import notifier from 'node-notifier'
 import nodemailer from 'nodemailer'
 import crypto from 'crypto'
+import { execFile } from 'child_process'
+import os from 'os'
 
 export type AlertSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
@@ -80,10 +81,36 @@ function dispatchAlert(event: AlertEvent) {
 }
 
 function sendLocalNotification(event: AlertEvent) {
-  notifier.notify({
-    title: `AgentGuard [${event.severity.toUpperCase()}]`,
-    message: event.message,
-    sound: event.severity === 'critical' || event.severity === 'high',
+  const title = `AgentGuard [${event.severity.toUpperCase()}]`
+
+  if (process.platform === 'darwin') {
+    execFile('osascript', ['-e', `display notification ${JSON.stringify(event.message)} with title ${JSON.stringify(title)}`], (err) => {
+      if (err) console.warn('[AlertManager] local notification unavailable:', err.message)
+    })
+    return
+  }
+
+  if (process.platform === 'win32') {
+    const script = `
+      [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null;
+      [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null;
+      $template = '<toast><visual><binding template="ToastText02"><text id="1"></text><text id="2"></text></binding></visual></toast>';
+      $xml = New-Object Windows.Data.Xml.Dom.XmlDocument;
+      $xml.LoadXml($template);
+      $nodes = $xml.GetElementsByTagName('text');
+      $nodes.Item(0).AppendChild($xml.CreateTextNode(${JSON.stringify(title)})) | Out-Null;
+      $nodes.Item(1).AppendChild($xml.CreateTextNode(${JSON.stringify(event.message)})) | Out-Null;
+      $toast = [Windows.UI.Notifications.ToastNotification]::new($xml);
+      [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('AgentGuard').Show($toast);
+    `
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], (err) => {
+      if (err) console.warn('[AlertManager] local notification unavailable:', err.message)
+    })
+    return
+  }
+
+  execFile('notify-send', [title, event.message], (err) => {
+    if (err) console.warn(`[AlertManager] local notification unavailable on ${os.platform()}: ${err.message}`)
   })
 }
 

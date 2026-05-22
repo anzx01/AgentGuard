@@ -2,9 +2,11 @@ node_modules/
 dist/
 .next/
 data/
+.claude/
 *.db
 *.db-shm
 *.db-wal
 .env
 .env.local
+.env.*.local
 .DS_Store
